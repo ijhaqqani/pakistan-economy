@@ -1,0 +1,99 @@
+series_name,series_name2,value,date
+Non Current Assets,Assets,3042364025,2018-09-30
+Non Current Assets,Assets,3122263461.263,2018-12-31
+Non Current Assets,Assets,3194120256,2019-03-31
+Non Current Assets,Assets,3343802541,2019-09-30
+Non Current Assets,Assets,3529502724,2019-12-31
+Non Current Assets,Assets,3562924280,2020-03-31
+Non Current Assets,Assets,3718643697,2020-09-30
+Non Current Assets,Assets,3767121658,2020-12-31
+Non Current Assets,Assets,3762986108,2021-03-31
+Non Current Assets,Assets,3747598888,2021-09-30
+Non Current Assets,Assets,3823889320.10101,2021-12-31
+Non Current Assets,Assets,3915326683,2022-03-31
+Non Current Assets,Assets,4344300826,2022-09-30
+Non Current Assets,Assets,4368683079,2022-12-31
+Current Assets,Assets,3349266244,2018-09-30
+Current Assets,Assets,3444047263.974,2018-12-31
+Current Assets,Assets,3539071477,2019-03-31
+Current Assets,Assets,3753282399,2019-09-30
+Current Assets,Assets,3873032407,2019-12-31
+Current Assets,Assets,4048034438,2020-03-31
+Current Assets,Assets,4044405371,2020-09-30
+Current Assets,Assets,4034458832,2020-12-31
+Current Assets,Assets,4262405244,2021-03-31
+Current Assets,Assets,4698634147,2021-09-30
+Current Assets,Assets,5007041114.30303,2021-12-31
+Current Assets,Assets,5400802331,2022-03-31
+Current Assets,Assets,6146415007,2022-09-30
+Current Assets,Assets,5962954550.30303,2022-12-31
+Issues/Subscribed/Paid Up Capital,Equity,546318233,2018-09-30
+Issues/Subscribed/Paid Up Capital,Equity,553259518.48,2018-12-31
+Issues/Subscribed/Paid Up Capital,Equity,554509233,2019-03-31
+Issues/Subscribed/Paid Up Capital,Equity,554891157,2019-09-30
+Issues/Subscribed/Paid Up Capital,Equity,561571911,2019-12-31
+Issues/Subscribed/Paid Up Capital,Equity,574851551,2020-03-31
+Issues/Subscribed/Paid Up Capital,Equity,579407374,2020-09-30
+Issues/Subscribed/Paid Up Capital,Equity,579699711,2020-12-31
+Issues/Subscribed/Paid Up Capital,Equity,590541029,2021-03-31
+Issues/Subscribed/Paid Up Capital,Equity,592338102,2021-09-30
+Issues/Subscribed/Paid Up Capital,Equity,595301735,2021-12-31
+Issues/Subscribed/Paid Up Capital,Equity,595534652,2022-03-31
+Issues/Subscribed/Paid Up Capital,Equity,608623147,2022-09-30
+Issues/Subscribed/Paid Up Capital,Equity,606654567,2022-12-31
+Reserves,Equity,2306487149,2018-09-30
+Reserves,Equity,2317580509.446,2018-12-31
+Reserves,Equity,2402508337,2019-03-31
+Reserves,Equity,2473178554,2019-09-30
+Reserves,Equity,2555849767,2019-12-31
+Reserves,Equity,2579171551,2020-03-31
+Reserves,Equity,2705109193,2020-09-30
+Reserves,Equity,2822090389,2020-12-31
+Reserves,Equity,2909704235,2021-03-31
+Reserves,Equity,3179993975,2021-09-30
+Reserves,Equity,3305208834,2021-12-31
+Reserves,Equity,3480131637,2022-03-31
+Reserves,Equity,3713208945,2022-09-30
+Reserves,Equity,3749765888,2022-12-31
+Surplus on Revaluation,Equity,173495782,2018-09-30
+Surplus on Revaluation,Equity,174015232,2018-12-31
+Surplus on Revaluation,Equity,172354024,2019-03-31
+Surplus on Revaluation,Equity,183337666,2019-09-30
+Surplus on Revaluation,Equity,197926280,2019-12-31
+Surplus on Revaluation,Equity,180547088,2020-03-31
+Surplus on Revaluation,Equity,223257682,2020-09-30
+Surplus on Revaluation,Equity,219355204,2020-12-31
+Surplus on Revaluation,Equity,225600753,2021-03-31
+Surplus on Revaluation,Equity,232754502,2021-09-30
+Surplus on Revaluation,Equity,230818619,2021-12-31
+Surplus on Revaluation,Equity,228614985,2022-03-31
+Surplus on Revaluation,Equity,270991309,2022-09-30
+Surplus on Revaluation,Equity,267262162,2022-12-31
+Non Current Liabilities,Liabilities,841558698,2018-09-30
+Non Current Liabilities,Liabilities,878776743.599,2018-12-31
+Non Current Liabilities,Liabilities,923919833,2019-03-31
+Non Current Liabilities,Liabilities,967571806,2019-09-30
+Non Current Liabilities,Liabilities,1057419432,2019-12-31
+Non Current Liabilities,Liabilities,1097957622,2020-03-31
+Non Current Liabilities,Liabilities,1226091566,2020-09-30
+Non Current Liabilities,Liabilities,1340617053,2020-12-31
+Non Current Liabilities,Liabilities,1303161276,2021-03-31
+Non Current Liabilities,Liabilities,1161510550,2021-09-30
+Non Current Liabilities,Liabilities,1186103764.10101,2021-12-31
+Non Current Liabilities,Liabilities,1220449657,2022-03-31
+Non Current Liabilities,Liabilities,1456976404,2022-09-30
+Non Current Liabilities,Liabilities,1431689564,2022-12-31
+Current Liabilities,Liabilities,2523770407,2018-09-30
+Current Liabilities,Liabilities,2642678721.572,2018-12-31
+Current Liabilities,Liabilities,2679900307,2019-03-31
+Current Liabilities,Liabilities,2918105757,2019-09-30
+Current Liabilities,Liabilities,3029767741,2019-12-31
+Current Liabilities,Liabilities,3178430906,2020-03-31
+Current Liabilities,Liabilities,3029183253,2020-09-30
+Current Liabilities,Liabilities,2839818133,2020-12-31
+Current Liabilities,Liabilities,2996384059,2021-03-31
+Current Liabilities,Liabilities,3279635906,2021-09-30
+Current Liabilities,Liabilities,3513497483,2021-12-31
+Current Liabilities,Liabilities,3791398083,2022-03-31
+Current Liabilities,Liabilities,4440916028,2022-09-30
+Current Liabilities,Liabilities,4276265448,2022-12-31

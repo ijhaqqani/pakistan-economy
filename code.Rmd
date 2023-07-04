@@ -10,1135 +10,14 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r m2 plot}
-
-library(tidyverse)
-library(readxl)
-library(ggtext)
-library(patchwork)
-
-m2 <- 
-  read_csv("m2_2.csv") %>%
-  mutate(
-    s4_2 = s4,
-    s4 = if_else(str_detect(s4,"PSEs Special Account-Debt Repayment")|str_detect(s4,"Zakat"),
-                 "Other Items (Net)",
-                 s4
-    ),
-    s3 = if_else(str_detect(s4_2,"PSEs Special Account-Debt Repayment")|str_detect(s4_2,"Zakat"),
-                 "Other Items (Net)",
-                 s3
-    )
-  ) %>% 
-  select(-s4_2) %>% 
-  group_by(s1,s2,s3,s4,date) %>% 
-  summarize(value = sum(value,na.rm = T),.groups = "drop")
-
-m2_labels_changed <- 
-  m2 %>% 
-  mutate(s4 = case_when(
-    s4=="Borrowings for Budgetary Support"~"Govt. Borrowings for Budgetary Support",
-    s4=="Scheduled Banks"~"NFA-Scheduled Banks",
-    s4=="State Bank of Pakistan"~"NFA-State Bank of Pakistan",
-    TRUE~s4
-  )) %>% 
-  mutate(s4 = factor(s4,
-                     levels = c(
-                       "Govt. Borrowings for Budgetary Support",
-                       "Commodity Operations",
-                       "Credit to Public Sectors Enterprises (PSEs)",
-                       "Credit to Private Sector",
-                       "Credit to NBFIs",
-                       "NFA-Scheduled Banks",
-                       "NFA-State Bank of Pakistan",
-                       "Other Items (Net)",
-                       m2 %>% filter(s1=="Liability Side") %>% distinct(s4) %>% pull()
-                     )))
-
-facetted_plotter <- function(data){
-  data %>%
-    ggplot() +
-    geom_line(aes(x = date, y = value,color = s4),linewidth = 1)+
-    facet_wrap( ~ s4,scales = "free_y") +
-    guides(
-      fill = "none",
-      color = "none") +
-    labs(x = NULL, y = NULL) +
-    scale_y_continuous(
-      label = scales::label_comma()
-    )+
-    theme_minimal()+
-    theme(
-      plot.title = element_text(hjust = 0.5,size = 16,face = "bold"),
-      plot.margin = margin(rep(15,4),unit = "pt")
-      )
-}
-
-facetted_asset <- 
-  m2_labels_changed %>% 
-  filter(s1=="Asset Side",
-         date >= ymd("2022-1-1")) %>% 
-  facetted_plotter()+
-  ggtitle("Asset Side")+
-  scale_color_manual(values = rep("brown",10))
-
-facetted_liab <- 
-  m2_labels_changed %>% 
-  filter(s1=="Liability Side",
-         date >= ymd("2022-1-1")) %>% 
-  facetted_plotter()+
-  ggtitle("Liability Side")+
-  scale_color_manual(values = rep("turquoise",10))
-
-ggsave(
-  plot = 
-    wrap_plots(
-      facetted_asset,facetted_liab,
-      ncol = 1,
-      heights = c(1.3,1)
-      )+
-    plot_annotation(
-      title = "Broad Money (M2) Components",
-      theme = theme(
-        plot.title = element_text(size = 18,hjust = 0.55, face = "bold",
-                                  margin = margin(t = 15))
-        # plot.margin = margin(t = 10,r = 15, l = 15)
-      )
-    ),
-  filename = "m2_plot.png",
-  width = 12,
-  height = 14,
-  dpi = 600
-)
-
-
-```
-
-```{r cps}
-
-plotter <- 
-  function(l){
-  # l <- 12
-    read_csv("cps.csv") %>%
-      group_by(date) %>%
-      summarize(value = sum(value, na.rm = T), .groups = "drop") %>%
-      mutate(value = zoo::rollmean(value, 12, align = "right", fill = NA)) %>%
-      drop_na() %>%
-      arrange(date) %>%
-      mutate(gr = (value - lag(value, l)) * 100 / lag(value, l)) %>%
-      ggplot() +
-      geom_col(aes(x = date, y = gr),
-               linewidth = 1.2,
-               fill = "deepskyblue4") +
-      theme_minimal() +
-      scale_x_date(name = NULL) +
-      scale_y_continuous(name = NULL,
-                         label = scales::label_percent(scale = 1)) +
-      theme(
-        plot.title = element_text(hjust = 0.5,size = 15,
-                                  margin = margin(t = 10, b = 10)),
-        axis.text = element_text(size = 12)
-        )
-  }
-
-wrap_plots(
-  plotter(12)+
-    ggtitle("Year on Year Change in CPS (12 MMA)"),
-  plotter(1)+
-    ggtitle("Month on Month Change in CPS (12 MMA)"),
-  ncol = 1
-)+
-  plot_annotation(
-    title = "Trends in Credit to Private Sector (CPS)",
-    theme = theme(
-      plot.title = element_text(hjust = 0.52,
-                                margin = margin(t = 10, b = 10),
-                                face = "bold",
-                                size = 18)
-      # axis.text = element_text(size = 1)
-    )
-  )+
-  ggsave(filename = "./Medium post Pakistan economy/cps_trends.png",height = 11,width = 13,dpi = 600)
-
-
-```
-
-
-```{r reserves adequacy}
-
-library(tidyverse)
-library(readxl)
-
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-
-imports <- 
-  read_csv("bop.csv") %>%
-  janitor::clean_names() %>%
-  mutate(date = dmy(observation_date)) %>% 
-  select(series_code = series_key,date,value = observation_value) %>% 
-  filter(
-    series_code %in% c(
-    "TS_GP_BOP_BPM6SUM_M.P00070",
-    "TS_GP_BOP_BPM6SUM_M.P00040"
-  )) %>% 
-  group_by(date) %>% 
-  summarize(imports = sum(value,na.rm =T),.groups = "drop") %>% 
-  select(date,imports)
-
-reserves <- 
-  read_csv("./reserves.csv") %>% 
-  select(1, sbp_reserves = 2)
-
-
-data <- 
-  imports %>% 
-  full_join(reserves) %>% 
-  drop_na() %>% 
-  mutate(ratio = sbp_reserves/imports) 
-
-data%>% 
-  ggplot()+
-  geom_line(
-    aes(x = date,y = ratio),
-    color = "brown4",
-    linewidth = 1.2
-  )+
-  theme_minimal()+
-  labs(x = NULL,y = "Number of months")+
-  # geom_text(
-  #   data =
-  #     data %>%
-  #     filter(date==max(date)),
-  #     # filter(date>=ymd("2021-7-1")),
-  #   aes(x = date, y = ratio,label = round(ratio,1),
-  #         )
-  # )+
-  ggtitle("SBP Reserves as number of months of imports")+
-  theme(
-    axis.title.y = element_text(margin = margin(r = 10),
-                                face = "bold"),
-    axis.title.x = element_text(face = "bold"),
-    axis.text = element_text(face = "bold",size = 10),
-    plot.title = element_text(hjust = 0.5,face = "bold")
-  ) +
-  ggsave(
-     filename = "./Medium post Pakistan economy/reserves_adequacy.png",
-     width = 9, 
-     height = 6
-     )
-  
-
-```
-
-```{r exchange rates}
-
-library(tidyverse)
-library(readxl)
-
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-
-open <- 
-  read_excel("interbank_openmarket.xlsx") %>% 
-  select(1:4) %>% 
-  janitor::clean_names() %>% 
-  drop_na() %>% 
-  mutate(date = mdy(date_2),
-         open = (buy + sell)/2) %>% 
-  select(date,open)
-
-interbank <- 
-  read_excel("interbank_openmarket.xlsx") %>% 
-  select(-1:-8) %>% 
-  mutate(date = as.Date(`date...9`),
-         interbank = (bid+offer)/2) %>% 
-  select(date,interbank) %>% 
-  drop_na()
-
-interbank %>% 
-  left_join(open, by = c("date")) %>% 
-  pivot_longer(cols = -1,names_to = "type") %>% 
-  mutate(type = factor(type,levels = c("open","interbank"))) %>% 
-  ggplot()+
-  geom_line(aes(x = date, y = value,color = type),linewidth = 1.2)+
-  scale_color_manual(
-    labels = c("Open Market", "Interbank"),
-    values = c("gold","azure4"),name = NULL)+
-  labs(y = "USD/PKR",
-       title = "Divergence in the Interbank and Open Market Rates of USD/PKR")+
-  theme_minimal()+
-  theme(
-    axis.title.x = element_blank(),
-    axis.text.x = element_text(face = "bold"),
-    axis.text.y = element_text(face = "bold"),
-    axis.title.y = element_text(face = "bold",margin = margin(r = 10)),
-    legend.position = c(0.8,0.2),
-    legend.text = element_text(face = "bold",size = 10),
-    plot.title = element_text(hjust = 0.5,face = "bold",margin = margin(b = 12))
-  )+
-  ggsave(
-    filename = "./Medium post Pakistan economy/interbank_open.png",
-    width = 10,
-    height = 7,
-    dpi = 600
-  )
-
-```
-
-
-```{r highlighted lines for multiple line plots}
-
-library(tidyverse)
-library(janitor)
-library(showtext)
-library(MetBrewer)
-library(scico)
-library(ggtext)
-library(patchwork)
-library(gghighlight)
-
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-
-df1 <- read.csv("data_consumer_confidence_small_multiples.csv") %>% 
-  mutate(date=lubridate::my(Time)) %>% 
-  select(-Time) %>% 
-  pivot_longer(!date, names_to = "country", values_to = "value") %>% 
-  na.omit()
-
-df2 <- 
-  read_csv("commodities_cleaned.csv") %>% 
-  filter(date>=ymd("2021-7-1"),
-         series_name != "Food Price Index")
-
-font <- "Gudea"
-# font_add_google(family=font, font, db_cache = TRUE)
-# fa_path <- systemfonts::font_info(family = "Font Awesome 6 Brands")[["path"]]
-# font_add(family = "fa-brands", regular = fa_path)
-theme_set(theme_minimal(base_family = font)
-                        # base_size = 10)
-          )
-# bg <- "#F4F5F1"
-bg = "white"
-txt_col <- "black"
-# showtext_auto(enable = TRUE)
-
-# caption_text  <- str_glue("**Design:** Gilbert Fontana<br>","**Data:** OECD, 2022")
-
-p1 <- df2 %>% 
-  ggplot() +
-  geom_hline(yintercept = 100,linetype="solid", size=.25) +
-  geom_point(data=df2 %>% 
-               group_by(series_name) %>% 
-               slice_max(date),
-             aes(x=date, y=value, color=series_name),shape=16) +
-  geom_line(aes(x=date, y=value, color=series_name)) +
-  gghighlight(use_direct_label = F,
-              unhighlighted_params = list(colour = alpha("grey85", 1))) +
-  geom_text(data=df2 %>% 
-              group_by(series_name) %>% 
-              slice_max(date),
-            aes(x=date, y=value, color=series_name, label = round(value)),
-            hjust = -.5, vjust = .5, size=2.5, family=font, fontface="bold") +
-  # scale_color_met_d(name="Redon") +
-  # scale_x_date(date_labels = "%y") +
-  # scale_y_continuous(breaks = c(90,95,100,105,110),
-  #                    labels = c("","","100","","")
-  # ) +
-  # facet_wrap(~series_name)+
-  #facet_wrap(~ country) +
-  facet_wrap(~factor(series_name, 
-                       levels=
-                         df2 %>% 
-                         group_by(series_name) %>% 
-                         filter(date==max(date)) %>% 
-                         arrange(desc(value)) %>% 
-                         pull(series_name)
-  ))+
-  coord_cartesian(clip = "off") +
-  theme(
-    axis.title = element_blank(),
-    axis.text = element_text(color=txt_col),
-                             # size=7),
-    strip.text.x = element_text(face="bold"),
-    # plot.title = element_markdown(hjust=.5,size=34, color=txt_col,lineheight=.8, face="bold", margin=margin(20,0,30,0)),
-    # plot.subtitle = element_markdown(hjust=.5,size=18, color=txt_col,lineheight = 1, margin=margin(10,0,30,0)),
-    # plot.caption = element_markdown(hjust=.5, margin=margin(60,0,0,0), size=8, color=txt_col, lineheight = 1.2),
-    # plot.caption.position = "plot",
-    plot.background = element_rect(color=bg, fill=bg),
-    plot.margin = margin(10,10,10,10),
-    legend.position = "none",
-    legend.title = element_text(face="bold")
-  )
-
-p1
-
-ggsave("highlighted_lines_commodity_prices.png",plot = p1,width = 14,height = 7,dpi = 600)
-ggsave("./Medium post Pakistan economy/Commodity Prices.png",plot = p1,width = 14,height = 7,dpi = 600)
-
-
-```
-
-
-```{r trade pbs_sbp}
-
-library(tidyverse)
-library(readxl)
-# remotes::install_github("nsgrantham/ggbraid")
-library(ggbraid)
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-
-old_pbs_data <- 
-  read_excel("./pbs_sbp_trade.xlsx",sheet = "old data") %>% 
-  mutate(type = "pbs") %>% 
-  distinct(.keep_all = T) %>% 
-  select(y,m,e,i,type) %>% 
-  left_join(
-    read_csv("./easydata files/exchange_rates.csv") %>%
-      janitor::clean_names() %>%
-      filter(series_key == "TS_GP_ER_FAERPKR_M.E00220") %>%
-      mutate(y = year(dmy(observation_date)),
-             m = month(dmy(observation_date))) %>%
-      select(y, m, er = observation_value)
-  ) %>% 
-  mutate(e = e/er,
-         i = i/er) %>% 
-  select(-er)
-
-pbs <- 
-  read_excel("./pbs_sbp_trade.xlsx",sheet = "Sheet1") %>% 
-  bind_rows(old_pbs_data) %>% 
-  # distinct(.keep_all = T)
-  mutate(date = ymd(paste(y,m,"01",sep = "-")) %>% ceiling_date(unit = "months") %>% rollback()) %>% 
-  select(date,exports = e, imports = i) %>% 
-  pivot_longer(cols = c(exports,imports),names_to = "head",values_to = "pbs")
-
-sbp <- 
-  read_csv("./bop.csv") %>% 
-  mutate(date = dmy(`Observation Date`)) %>% 
-  janitor::clean_names() %>% 
-  filter(series_key %in% c("TS_GP_BOP_BPM6SUM_M.P00030",
-                           "TS_GP_BOP_BPM6SUM_M.P00040")
-  ) %>% 
-         # date>=ymd("2022-01-01")) %>% 
-  select(date, sbp = observation_value,head = series_name) %>% 
-  mutate(
-    # type = "sbp",
-    head = if_else(str_detect(head,"Exports"),"exports","imports")
-  )
-sbp
-pbs
-
-
-data_wide <- 
-  sbp %>% 
-  right_join(pbs) %>%
-  group_by(date) %>% 
-  mutate(sbp = sbp[head=="exports"]-sbp[head=="imports"],
-         pbs = pbs[head=="exports"]-pbs[head=="imports"]) %>% 
-  distinct(date,sbp,pbs) %>% 
-  ungroup()
-data_long <- 
-  data_wide %>% 
-  pivot_longer(cols = -1,names_to = "type",values_to = "value")
-
-cab <- 
-  read_csv("./bop.csv") %>% 
-  janitor::clean_names() %>% 
-  filter(series_key == "TS_GP_BOP_BPM6SUM_M.P00010") %>% 
-  mutate(date = dmy(observation_date)) %>% 
-  select(date,cab = observation_value) %>% 
-  right_join(
-    data_wide,
-    by = c("date")
-  ) %>% 
-  mutate(
-    m_p = (sbp+pbs)/2,
-    ymin = m_p - (cab/2),
-    ymax = m_p + (cab/2),
-  )
-
-date_first_day_f <- function(data){data %>% mutate(date = ymd(paste0(str_sub(date,1,7),"-01")))}
-data_long <- data_long %>% date_first_day_f()
-data_wide <- data_wide %>% date_first_day_f()
-cab <- cab %>% date_first_day_f()
-
-# for (data in c("cab","data_long","data_wide")){
-#   assign(data, mutate(!!sym(data), date = ymd(paste0(str_sub(date,1,7),"-01"))))
-# }
-
-library(colorspace)
-colors <- c("#28A87F", "#9C4BFF")
-fills <- desaturate(lighten(colors, .8), .3)
-
-  # pivot_longer(cols = c(pbs,sbp),names_to = "type") %>% 
-  # filter(head=="exports") %>% 
-data_long %>% 
-  ggplot()+
-  geom_line(aes(x = date,
-                y = value,
-                # color = type,
-                group = type
-                ),
-            color = "white",
-            size = 3.2
-  )+
-  geom_line(aes(x = date,
-                y = value,
-                color = type,
-                # group = type
-                ),
-            size = 1.2
-  )+
-  # scale_y_continuous(limits = c(-5000,500))+
-  geom_braid(
-    method = "line",
-    data = data_wide,
-    aes(date,ymin = pbs,ymax = sbp,fill = pbs<sbp),alpha = 0.5
-  )+
-  # geom_errorbar(
-  #   data = cab %>% filter(date>=min(data_wide$date)),
-  #   aes(x = date, ymin = ymin, ymax = ymax),
-  #   width = 10,
-  #   alpha = 0.3
-  # )+
-  scale_color_manual(values = colors)+
-  # scale_y_continuous(limits = c(-6000,500))+
-  # scale_x_date(date_breaks = "1 month")+
-  scale_fill_manual(values = fills,
-                    guide = "none")+
-  ggsave("pbs_sbp_2.pdf",width = 15,height = 8)
-
-cab %>% 
-  ggplot()+
-  geom_point(aes(x = -cab,y = sbp-pbs))
-
-cab %>% 
-  ggplot()+
-  geom_line(aes(date,-cab))
-
-
-# expand_grid(y = c(2010:2019),m = c(1:12)) %>% 
-#   filter(!(y==2019 & m>6)) %>%
-#   left_join(old_data %>% count(y,m)) %>% 
-#   pivot_wider(names_from = m, values_from = n) 
-  
-                 # linetype = head))
-  # geom_line(aes(x = date,y = pbs,color = head))
-
-```
-
-```{r tidytuesday}
-
-install.packages("tidytuesdayR")
-
-# Get the Data
-
-# Read in with tidytuesdayR package 
-# Install from CRAN via: install.packages("tidytuesdayR")
-# This loads the readme and all the datasets for the week of interest
-
-# Either ISO-8601 date or year/week works!
-
-tuesdata <- tidytuesdayR::tt_load('2023-05-23')
-tuesdata <- tidytuesdayR::tt_load(2023, week = 21)
-
-squirrel_data <- tuesdata$squirrel_data
-
-# Or read in the data manually
-
-squirrel_data <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-05-23/squirrel_data.csv')
-
-
-```
-
-```{r old bop data}
-
-library(tidyverse)
-library(readxl)
-
-old_bop_data <- 
-  read_excel("./Compendium-Web (2).xlsx",sheet = "bop_data") %>% 
-  mutate(
-    y2 = str_sub(y,3,4),
-    fy = if_else(as.numeric(y2)<=99 & as.numeric(y2)>=49,
-                 paste0("19",y2) %>% as.numeric(),
-                 paste0("20",y2) %>% as.numeric()
-                 ),
-    year = case_when(
-      q %in% c("Q1","Q2","Jul-Dec")~(fy %>% as.numeric()) - 1,
-      q %in% c("Q3","Q4","Jan-Jun")~fy %>% as.numeric()
-    ),
-    month = 
-      case_when(
-        q=="Q1"~8,
-        q=="Q2"~11,
-        q=="Q3"~2,
-        q=="Q4"~5,
-        q=="Jul-Dec"~9,
-        q=="Jan-Jun"~3
-      ),
-    day = 
-      case_when(
-        month %in% c(8,11,2,5) ~ "15",
-        month %in% c(9,3) ~ "01"
-      ),
-    date = ymd(paste(year,month,day,sep = "-")),
-    date = if_else(month(date) %in% c(9,3),
-                   date %>% ceiling_date(unit = "months") %>% rollback(),
-                   date),
-    era = case_when(
-      date <= ymd("1971-06-30") ~ "Era 1",
-      date >= ymd("1971-07-01") & date <= ymd("1984-06-30") ~ "Era 2",
-      date >= ymd("1984-07-01") & date <= ymd("2002-06-30") ~ "Era 3",
-      date >= ymd("2002-07-01") ~ "Era 4"
-    )
-    # interval = 
-    #   interval()
-  ) %>% 
-  select(date,era,q,y,month,year,y2,fy,`1.Current Account`:`2.Capital Account (after FY03)`) %>% 
-  select(-c(q:fy)) %>%
-  pivot_longer(cols = -1:-2,names_to = "head") %>% 
-  filter(!is.na(value)) %>% 
-  filter(!((era == "Era 4" & head %in% c("1.Current Account","3.Reserves")) |
-           (era == "Era 3" & head %in% c("1.Current Account")) |
-           (era == "Era 2" & head %in% c("1.Current Account")) |
-           (era == "Era 1" & head %in% c("1.Current Account"))
-  )) %>% 
-  mutate(
-    head = str_extract(head,"[A-Za-z\\s].*") %>% trimws(),
-    head = case_when(
-      head=="Capital and monetry Gold" ~ "Capital and Monetary Gold",
-      head=="PrimaryIncome Account" ~ "Primary Income Account",
-      head=="Capital Account (after FY03)" ~ "Capital Account",
-      head=="Financial Account (new formulation" ~ "Financial Account",
-      TRUE~head
-    ),
-    value = if_else(era=="Era 4" & head=="Financial Account",-value,value)
-  )
-
-old_bop_data2 <- 
-  old_bop_data %>% 
-  mutate(
-    year = year(date),
-    month = month(date),
-    start = case_when(
-      month==8~ymd(paste(year,7,"01",sep = "-")),
-      month==11~ymd(paste(year,10,"01",sep = "-")),
-      month==2~ymd(paste(year,1,"01",sep = "-")),
-      month==5~ymd(paste(year,4,"01",sep = "-")),
-      month==9~ymd(paste(year,7,"01",sep = "-")),
-      month==3~ymd(paste(year,1,"01",sep = "-"))
-    ),
-    end = case_when(
-      month==8~ymd(paste(year,9,"01",sep = "-")),
-      month==11~ymd(paste(year,12,"01",sep = "-")),
-      month==2~ymd(paste(year,3,"01",sep = "-")),
-      month==5~ymd(paste(year,6,"01",sep = "-")),
-      month==9~ymd(paste(year,12,"01",sep = "-")),
-      month==3~ymd(paste(year,6,"01",sep = "-"))
-    ) %>% 
-      ceiling_date(unit = "months") %>% rollback(),
-    date2 = 
-      interval(
-        start,end
-      )
-  )
-
-library(colorspace)
-# pal <- choose_palette()
-
-init_chart <- 
-  old_bop_data2 %>% 
-  # filter(era=="Era 1") %>% 
-  ggplot()+
-  geom_area(aes(x = date,y = value,fill = head),alpha = 0.6)+
-  guides(fill = "none")+
-  scale_fill_discrete_diverging()+
-  facet_wrap(~era,scales = "free",dir = "h")
-
-# ggsave("old_bop1.pdf",init_chart,width = 15,height = 10)
-
-bop_plotter <- function(data){
-    # browser()
-    data %>%
-      ggplot() +
-      geom_col(
-        aes(x = date, y = value, fill = head),
-        position = position_stack()
-        # color = "white"
-      )+
-        # alpha = 0.7)+
-      # guides(fill = "none")
-      theme(
-        legend.title = element_blank(),
-        legend.text = element_text(size = 7),
-        legend.key.size = unit(0.5,"cm")
-        # legend.position = "top"
-      )+
-    scale_fill_manual(values = c(
-      "greenyellow","indianred","gray0","lightblue4",
-      "mediumpurple4","lightpink1","gold2","aquamarine","darkblue",
-      "deeppink","green4","gray88","khaki1"
-    ))
-      # scale_fill_discrete_qualitative()
-      # facet_wrap( ~ era, scales = "free") +
-}
-
-# old_bop_data %>% 
-#   ggplot()+
-#   geom_area(aes(x = date,y = value,fill = head))+
-#   # scale_fill_discrete_qualitative()+
-#   labs(y = NULL,x = NULL,fill = NULL)+
-#   facet_wrap(.~era,scales = "free",ncol = 1)+
-#   scale_fill_manual(values = c(
-#       "greenyellow","indianred","gray0","lightblue4",
-#       "mediumpurple4","lightpink1","gold2","aquamarine","darkblue",
-#       "deeppink","green4","gray88","khaki1"
-#     ))+
-#   theme(
-#     legend.text = element_text(size = 8)
-#   )+
-#   ggsave(filename = "old_bop_plot2.pdf",height = 12,width = 8)
-  # scale_fill_manual(values = c(
-  #     "greenyellow","indianred","gray0","lightblue4",
-  #     "mediumpurple4","lightpink1","gold2","aquamarine"
-  #   ))
-
-graphs_list <- 
-  old_bop_data %>%
-  split(.$era) %>% 
-  map(bop_plotter) %>% 
-  wrap_plots(
-    # guides = "collect",
-    ncol = 1)
-graphs_list
-ggsave("old_bop_plot3.pdf",graphs_list,width = 10,height = 13)
-graphs_list[[1]]
-  # mutate(era = case_when(
-  #   date <= ymd("1971-06-30") ~ "Era 1",
-  #   date >= ymd("1971-07-01") & date <= ymd("1984-06-30") ~ "Era 2",
-  #   date >= ymd("1985-07-01") & date <= ymd("2002-06-30") ~ "Era 3",
-  #   date >= ymd("2002-07-01") ~ "Era 4",
-  # )) %>% 
-  ggplot()+
-  geom_area(aes(x = date, y = value, fill = head))+
-  facet_wrap(~era,scales = "free")+
-  scale_fill_viridis_d()
-
-
-
-```
-
-```{r exchange_rate viz}
-
-library(tidyverse)
-rm(list = ls())
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-
-library(patchwork)
-
-# library(shiny)
-# runExample("01_hello")
-
-# this is basically going to be about the story of USD/PKR. this story would in turn tell the story of the pakistan economy. 
-# one big line graph showing the movement of the ER
-# separate page detailing the history. one idea could be 4 separate text boxes on 1 page each of which would provide details about the transitional periods in pakistan economic history. it could be more than 4. 
-# the third page could provide some lessons about the future. 
-# i should fit in comparison of other currencies against USD as well. probably on the second page. 
-# also add comparison with other variables, like BOP, CAB, Exports, etc. 
-# ggbraid
-# scatter plot with export growth and exchange rate depreciation
-# other scatter plots of countries, for comparison with pakistan
-# if multiple lines in one plot, and there are a few of these, then label them right along (and not through a legend)
-# how many countries target exchange rate, something about this fact
-
-er_data <- 
-  read_csv("./easydata files/exchange_rates.csv") %>% 
-  # list.files("./easydata files",pattern = "csv",full.names = T) %>% 
-  # map(~read_csv(.,show_col_types = F)) %>% 
-  # bind_rows() %>% 
-  janitor::clean_names() %>% 
-  mutate(date = dmy(observation_date),value = observation_value) %>% 
-  select(-observation_date,-series_display_name,-observation_value,-observation_status,-observation_status_comment,-sequence_no,-unit)
-
-# er_data %>% 
-#   distinct(series_name) %>% 
-#   View()
-
-extrafont::loadfonts(device = "win")
-
-recessions <- 
-  readxl::read_excel("gdp_growth.xlsx") %>% 
-  mutate(year = if_else(str_sub(fy,3,4) %>% as.numeric() %>% between(51,99),
-                        paste0("19",str_sub(fy,3,4)),
-                        paste0("20",str_sub(fy,3,4))
-                        ) %>% 
-           as.numeric()
-         ) %>% 
-  filter(gdp_g<2) %>% 
-  mutate(start = ymd(paste0(year-1,"07","01")),
-         end = ymd(paste0(year,"06","30"))) %>% 
-  select(start,end)
-
-bop_series <- c(
-  "TS_GP_BOP_BPM6SUM_M.P00010",
-  "TS_GP_BOP_BPM6SUM_M.P00280",
-  "TS_GP_BOP_BPM6SUM_M.P00240",
-  "TS_GP_BOP_BPM6SUM_M.P00670"
-)
-
-bop <- 
-  read_csv("./bop.csv") %>% 
-  janitor::clean_names() %>%
-  filter(series_key %in% bop_series) %>% 
-  mutate(date = dmy(observation_date)) %>% 
-  select(series_name,value = observation_value,date)
-
-cab <- 
-  bop %>% filter(series_name=="BOP-BPM6-Current account balance")
-
-combined_data <- 
-  cab %>% 
-  select(cab = value,date) %>% 
-  left_join(er_data %>% 
-              filter(series_key == "TS_GP_ER_FAERPKR_M.E00220") %>% 
-              select(er = value,date),
-            by = c("date"))
-
-# look for old bop data in bop_data_old file and the Compendium file as well. try to make a graph of that as well. 
-
-
-reserves <- 
-  read_csv("./reserves.csv") %>% 
-  select(date,sbp_reserves = 2, banks_reserves = 3) %>% 
-  left_join(er_data %>% 
-              filter(series_key=="TS_GP_ER_FAERPKR_M.E00220") %>% 
-              select(date,er = value),
-            by = c("date")) %>% 
-  mutate(total = sbp_reserves + banks_reserves)
-
-# combined_data <- 
-#   combined_data %>% 
-#   select(-credit) %>% 
-#   left_join(reserves %>% select(1:3)) %>% 
-#   arrange(date)
-
-
-  # tidyr::drop_na()
-
-# # f(combined_data,first,second)
-# max_first  <- combined_data[first] %>% max()   # Specify max of first y axis
-# max_second <- combined_data[second] %>% max() # Specify max of second y axis
-# min_first  <- combined_data[first] %>% min()   # Specify min of first y axis
-# min_second <- combined_data[second] %>% min() # Specify min of second y axis
-
-# scale and shift variables calculated based on desired mins and maxes
-
-# scale = (max_second - min_second)/(max_first - min_first)
-# scale <- (max_first - min_first)/(max_second - min_second)
-# shift = min_first - min_second
-# shift <- min_second - min_first
-
-# scale <- (min_max_function(combined_data,first,second)[1] - min_max_function(combined_data,first,second)[3])/
-#   (min_max_function(combined_data,first,second)[2] - min_max_function(combined_data,first,second)[4])
-# shift <- min_max_function(combined_data,first,second)[4] - min_max_function(combined_data,first,second)[3]
-
-first <- "cab"
-second <- "er"
-
-scale_shift_f <- function(data,f,s){
-  max_first = data[f] %>% max()
-  max_second = data[s] %>% max()
-  min_first = data[f] %>% min()
-  min_second = data[s] %>% min()
-  scale <- (max_first - min_first)/(max_second - min_second)
-  shift <- min_second - min_first
-  return(c(scale,shift))
-}
-
-scale <- scale_shift_f(combined_data,first,second)[1]
-shift <- scale_shift_f(combined_data,first,second)[2]
-
-# Function to scale secondary axis
-scale_function <- function(x, scale, shift){
-    return ((x)*scale - shift)
-  }
-
-# Function to scale secondary variable values
-inv_scale_function <- function(x, scale, shift){
-  return ((x + shift)/scale)
-}
-
-combined_data %>% 
-  mutate(
-    er2 = scale_function(er,scale,shift),
-    er3 = inv_scale_function(er2,scale,shift))
-  # scale_function(combined_data["er"],scale,shift)
-
-combined_graph <- 
-  ggplot(combined_data, aes(x = date, y = !!sym(first))) +
-  geom_area(aes(fill = first),alpha = 1) +
-  # geom_line(aes(y = inv_scale_function(!!sym(second), scale, shift), color = second)) +
-  geom_line(
-    aes(y = scale_function(!!sym(second), scale, shift),
-        color = second),
-    linewidth = 1) +
-  # scale_x_continuous(breaks = seq(0, 336, 24)) +
-  scale_y_continuous(
-    # limits = c(min_first, max_first),
-    expand = expansion(mult = c(0.6,0.09)),
-    sec.axis = sec_axis(
-      # breaks = waiver(),
-      # breaks = c(50,100,150,200,250,300,350),
-      ~inv_scale_function(., scale, shift), name=second
-      )
-    ) +
-  labs(x = NULL, y = first, color = NULL,fill = NULL) +
-  scale_color_manual(values = c("gray30"))+
-  # scale_color_identity(guide = "legend")+
-  scale_fill_viridis_d(
-    # values = c("green"),
-    # guide = "legend"
-    )+
-  # guides(fill = guide_legend(title = "Legend Title"), color = guide_legend(title = NULL))+
-  theme(
-    legend.title = element_blank(),
-    legend.key.size = unit(0.50,"cm"),
-    legend.text = element_text(face = "bold",size = 12),
-    legend.box.background = element_rect(fill = "transparent",color = NA),
-    legend.background = element_rect(fill = "transparent",colour = NA),
-    legend.position = c(0.15,0.85),
-    legend.key = element_rect(fill = "transparent"),
-    legend.spacing = unit(-1, "lines"),
-    panel.background = element_rect(fill = "transparent")
-    )
-# ggsave("combined_graph.png",combined_graph,width = 15,height = 10,dpi = 600)
-combined_graph
-
-first2 <- "total"
-second2 <- "er"
-scale2 <- scale_shift_f(reserves,first2,second2)[1]
-shift2 <- scale_shift_f(reserves,first2,second2)[2]
-shift2 <- 1000
-
-reserves_plot <- 
-  reserves %>% 
-  select(1:3) %>% 
-  pivot_longer(cols = -1,names_to = "type") %>% 
-  ggplot()+
-  geom_area(aes(x = date,y = value,fill = type),alpha = 0.5)+
-  geom_line(data = reserves,aes(x = date,y = scale_function(er,scale2,shift2)))+
-  scale_y_continuous(
-    # limits = c(1000,30000),
-    sec.axis = sec_axis(~inv_scale_function(.,scale2,shift2),
-                        # breaks = NULL)
-    ),
-    expand = expansion(0)
-    # breaks = NULL
-  )+
-  scale_fill_viridis_d(option = "H")+
-  scale_x_date(
-    expand = expansion(0),
-    # breaks = ymd("2010-01-01","2023-06-30"),
-    date_breaks = "5 year",
-    date_labels = "%Y"
-    )+
-  # theme_minimal()+
-  labs(x = NULL,y = NULL)+
-  theme(
-    panel.background = element_rect(fill = "transparent"),
-    legend.title = element_blank(),
-    legend.key.size = unit(0.5,"cm"),
-    legend.text = element_text(size = 10),
-    legend.position = c(0.15,0.85))
-
-reserves_plot
-
-patchwork_plot2 <- 
-  combined_graph+
-  inset_element(reserves_plot,0.05,0.05,0.6,0.35,align_to = "panel")
-
-patchwork_plot2
-ggsave("patchwork_3.pdf",plot = patchwork_plot2,width = 12,height = 9)
-# ggsave("patchwork_3.png",plot = patchwork_plot2,device = "png",width = 15,height = 9,dpi = 600)
-
-
-
-### Patchwork experiment
-
-background_color = "black"
-
-p1 <- 
-  er_data %>% 
-  # distinct(series_key,series_name) %>% View()
-  filter(str_detect(dataset_name,"(?i)exchange rate")) %>% 
-  filter(series_key=="TS_GP_ER_FAERPKR_M.E00220") %>%
-  # filter(series_key=="TS_GP_ER_FAERPKR_M.E00460") %>%   
-  ggplot()+
-  geom_line(aes(date,value),linewidth = 1,color = "white")+
-  geom_rect(data = recessions,aes(xmin = start,xmax = end,ymin = -Inf,ymax = Inf),
-            fill = "gainsboro",
-            alpha = 0.5)
-  # theme_bw()
-  
-  # theme_void()+
-  
-theme_f <- function(p){
-  p + 
-    theme(
-    plot.title = element_text(hjust = 0.5,
-                              face = "bold",
-                              color = "white",
-                              size = 18),
-    plot.subtitle = element_text(hjust = 0.5,face = "bold",size = 10),
-    axis.title.y = element_text(face = "bold",color= "white"),
-    axis.text.x = element_text(face = "bold",size = 12,color = "white"),
-    axis.text.y = element_text(face = "bold",size = 12,color = "white"),
-    text = element_text(family = "Cambria",color = "white"),
-    # panel.grid.major = element_line(colour = "gray0", linetype = "dashed",size = 0.01),
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    # panel.grid.minor = element_line(colour = "gray", linetype = "dotted"),
-    panel.background = element_rect(fill = background_color),
-    plot.background = element_rect(fill = background_color)
-  )+
-  scale_fill_viridis_d()
-}
-
-labs_f <- function(p){
-  p +
-    labs(x = NULL,
-       y = NULL,
-       fill = NULL,
-       title = "The Story of Pakistan's Rupee",
-       subtitle = "Value of 1 USD in terms of Pakistan Rupee"
-       )
-}
-
-series_line_plot_f <- function(sk){
-  # browser()
-  er_data %>% 
-    filter(
-      # date>=as.Date("1990-01-01"),
-      series_key==sk) %>% 
-    ggplot()+
-    geom_line(aes(x = date, y = value))
-}
-
-p2 <- 
-  series_line_plot_f("TS_GP_ER_FAERPKR_M.E00170") +
-  theme_void()
-p3 <- 
-  series_line_plot_f("TS_GP_ER_FAERPKR_M.E00180")+
-  theme_void()
-p4 <- 
-  series_line_plot_f("TS_GP_ER_FAERPKR_M.E00190")
-
-patchwork_p <- 
-  ((p1 %>% labs_f() %>% theme_f()) | (p2 / p3 / p4)) +
-  # (p1 %>% labs_f() %>% theme_f()) + p2 + p3 + p4 +
-  plot_layout(
-    widths = c(1,0.35)
-    # design = c(
-    #   area(1,2),
-    #   area(1,3),
-    #   area(1,4)
-    # )
-  )
-    # widths = c(5,2,2,2))
-
-patchwork_p
-# ggsave("patchwork_1.png",plot = patchwork_p,device = "png",width = 20,height = 11,dpi = 600)
-(p1 / (p2 + p3 + p4)) +
-  plot_layout(widths = c(4/5, 1/5), heights = c(1/3, 1/3, 1/3))
-
-
-
-### Plotly experiment
-
-library(plotly)
-plotly_plot <- 
-  plot_ly(
-  data = combined_data,x = ~date,y = ~cab,type = "bar",
-  color = "black")
-
-ggsave("plotly.png",subplot(p1,
-        subplot(p2,p3,p4,nrows = 3),
-        widths = c(0.8,0.2)
-),width = 12)
-
-combined_graph
-
-combined_data %>% 
-  arrange(cab)
-
-combined_graph <- 
-  er_data %>% 
-  filter(
-    date>=as.Date("1990-01-01"),
-    series_key == "TS_GP_ER_FAERPKR_M.E00220")%>% 
-  ggplot()+
-  geom_line(aes(x = date,y = value))+
-  geom_line(data = cab, aes(x = date,y = value))+
-  scale_
-  # theme_f() %>% 
-  # labs_f()
-
-combined_graph
-
-bop <- 
-  readxl::read_excel("Compendium-Web (2).xlsx",sheet = "bop_data") %>% 
-  janitor::clean_names() %>% 
-  set_names(names(.) %>% 
-              str_replace("^x","1") %>% 
-              str_remove_all( "^[^a-zA-Z]*")) %>% 
-  rename(capital_and_monetary_gold = 8,
-         allocations_of_SDR = 10,
-         primary_income = 13,
-         secondary_income = 14,
-         financial_account_FY03_onwards = 15,
-         capital_account_FY03_onwards = 16)
-
-bop %>%
-  filter(str_length(q) == 2) %>%
-  mutate(
-    y = if_else(
-      str_sub(y, 3, 4) %>% as.numeric() %>% between(51, 99),
-      paste0("19", str_sub(y, 3, 4)),
-      paste0("20", str_sub(y, 3, 4))
-      ) %>% as.numeric(),
-    q = str_sub(q,2,2) %>% as.numeric()
-    ) %>% 
-  mutate(
-    date = paste0(
-      if_else(q < 3, y - 1,y),
-      "-",
-      if_else(q < 3, (q+2)*3,(q-2)*3),
-      "-01"
-    ) %>% ymd()
-  ) %>% 
-  relocate(date,.after = y) %>% 
-  mutate(across(-1:-3,~replace_na(.,0))) %>% 
-  pivot_longer(cols = -1:-3,values_to = "value",names_to = "comp") %>% 
-  ggplot()+
-  geom_col(aes(date,value,fill = comp),position = position_stack())+
-  scale_fill_viridis_d()
-
-
-bop
-
-
-```
-
 ```{r tableau work}
 
 library(tidyverse)
-rm(list = ls())
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
+library(readxl)
 
 combined_data <- 
   list.files("./easydata files",pattern = "csv",full.names = T) %>% 
   map(~read_csv(.,show_col_types = F,col_types = cols(`Observation Value` = col_double(),.default = col_guess()))) %>% 
-  # .[[11]] %>% View()
   bind_rows() %>% 
   janitor::clean_names() %>% 
   mutate(date = dmy(observation_date),value = observation_value) %>% 
@@ -1155,7 +34,6 @@ des_series <-
 "TS_GP_BOP_MRECCOM_M.IMPA00290",
 "TS_GP_PT_CPI_M.P00011516",
 "TS_GP_BAM_M2_W.M000500",
-# "TS_GP_BOP_WR_M.WR0340",
 "TS_GP_IR_REPOMR_D.ORR",
 "TS_GP_RLS_PSAUTO_M.TAS_001000",
 "TS_GP_RLS_CEMSEC_M.C_002000",
@@ -1175,20 +53,14 @@ des_series <-
 
 real_sector_ind <- 
   combined_data %>% 
-  # filter(str_detect(series_name,"(?i)broad money.*liab")) %>% View()
-  # filter(date>=as.Date("2021-08-01")) %>% 
   filter(date>=as.Date("2021-07-01")) %>% 
   filter(series_key %in% des_series) %>% 
   filter(!(series_key %in% c("TS_GP_RL_LSM_M.LSM000160000","TS_GP_BAM_M2_W.M000500"))) %>% 
-  # distinct(series_name,series_key) %>% View()
-  # select() %>% 
   group_by(series_name,year(date),month(date)) %>% 
   filter(date==max(date)) %>% 
   mutate(date=ceiling_date(date,"months")-1) %>% 
   ungroup() %>% 
   select(-dataset_name,-series_key, -`year(date)`,-`month(date)`) %>% 
-  # count(series_name,date) %>% filter(n>1)
-  # pivot_wider(names_from = series_name,values_from = value) %>%
   arrange(date) %>%
   group_by(series_name) %>%
   mutate(value = if_else(series_name %in% c("WPI, an Inflation Measure (Year-on-Year basis)",
@@ -1199,14 +71,9 @@ real_sector_ind <-
                          # value,
                          value*100 / last(value[year(date)==2021 & month(date)==7]),
                          value*100 / last(value[year(date)==2021 & month(date)==7]))
-                         # value*100/value[date==as.Date("2021-08-31")],
-                         # value*100/value[date==as.Date("2021-08-31")])
          ) %>% 
   ungroup() %>% 
   complete(series_name,date)
-  # filter(!is.na(value))
-
-# real_sector_ind %>% filter(series_name %>% str_detect("Broad Money"))
 
 names2 <- 
   c("USD/PKR","Trade Balance (incl. Services)","CA Balance","SBP Reserves","Workers' Remittances",
@@ -1232,7 +99,6 @@ m2 <-
   combined_data %>% 
   filter(dataset_name=="Weekly Broad Money M2")
 
-# clipr::read_clip() %>%paste0("\"",.,"\"") %>%  glue::glue_collapse(sep = ",")
 m2_des_series <- 
   c("TS_GP_BAM_M2_W.M000010","TS_GP_BAM_M2_W.M000020","TS_GP_BAM_M2_W.M000040","TS_GP_BAM_M2_W.M000050","TS_GP_BAM_M2_W.M000060","TS_GP_BAM_M2_W.M000090","TS_GP_BAM_M2_W.M000100","TS_GP_BAM_M2_W.M000150","TS_GP_BAM_M2_W.M000310","TS_GP_BAM_M2_W.M000320","TS_GP_BAM_M2_W.M000340","TS_GP_BAM_M2_W.M000380","TS_GP_BAM_M2_W.M000390","TS_GP_BAM_M2_W.M000400","TS_GP_BAM_M2_W.M000410")
 
@@ -1250,6 +116,7 @@ m2_2 <-
   left_join(m2_mapping %>% bind_cols(series_key = m2_des_series),by = c("series_key")) %>% 
   select(s1:s4,date,value)
 
+# data collected from sbp website https://www.sbp.org.pk/departments/stats/FSA-index.htm (latest report)
 fsa <- 
   readxl::read_excel("fsa-q.xlsx",sheet = 2,skip = 4,col_names = F) %>% 
   set_names(
@@ -1303,19 +170,6 @@ cps <-
         "TS_GP_BAM_CRLONBOR_M.CLB00025000",
         "TS_GP_BAM_CRLONBOR_M.CLB00077000",
         "TS_GP_BAM_CRLONBOR_M.CLB00090000"
-        # "TS_GP_BAM_CRLONBOR_M.CLB00131000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00130000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00081000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00046000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00052000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00053000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00060000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00098000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00106000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00113000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00122000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00040000",
-        # "TS_GP_BAM_CRLONBOR_M.CLB00044000"
       )
   ) %>% 
   mutate(series_name = str_remove(series_name,"Scheduled Banks Loans to |Scheduled Banks ")) %>% 
@@ -1325,7 +179,8 @@ cps <-
       bind_rows(
         data %>% 
           group_by(date) %>% 
-          summarize(value = sum(value[series_name=="Private sector"])-sum(value[series_name!="Private sector"]),.groups = "drop") %>% 
+          summarize(value = sum(value[series_name=="Private sector"])-sum(value[series_name!="Private sector"]),
+                    .groups = "drop") %>% 
           mutate(series_name = "Others")
       )
   } %>% 
@@ -1359,6 +214,8 @@ rates <-
   group_by(series_name) %>% 
   fill(value)
 
+
+# data on BCS and CCS collected from sbp website https://www.sbp.org.pk/research/intro.asp
 bcs <- 
   list.files(".",pattern = "bcs|pmi") %>% 
   str_subset(pattern = "xlsx|xls") %>% 
@@ -1397,7 +254,7 @@ bcs <-
   mutate(series_name2 = "Business Confidence Survey")
   
 ccs <- 
-  readxl::read_excel("ccs.xlsx",skip = 5) %>%
+  read_excel("ccs.xlsx",skip = 5) %>%
   select(date = 1,`Current Economic Conditions Index` = 2, 
          `Consumer Confidence Index` = 3, `Expected Economic Conditions Index` = 4, 
          `Inflation Expectations Index` = 5) %>% 
@@ -1424,7 +281,6 @@ monthly_bop <-
 
 des_series_bop <- 
   c(
-    # "TS_GP_BOP_BPM6SUM_M.P00010",
     "TS_GP_BOP_BPM6SUM_M.P00030",
     "TS_GP_BOP_BPM6SUM_M.P00040",
     "TS_GP_BOP_BPM6SUM_M.P00080",
@@ -1435,9 +291,6 @@ des_series_bop <-
     "TS_GP_BOP_BPM6SUM_M.P00540",
     "TS_GP_BOP_BPM6SUM_M.P00580",
     "TS_GP_BOP_BPM6SUM_M.P00670"
-    # "TS_GP_BOP_BPM6SUM_M.P00680",
-    # "TS_GP_BOP_BPM6SUM_M.P00690"
-    # "TS_GP_BOP_BPM6SUM_M.P00710"
     )
 
 monthly_bop <- 
@@ -1559,6 +412,7 @@ remittances <-
   group_by(date,series_name = series_display_name) %>% 
   summarize(value = sum(value,na.rm = T))
 
+# data collected through web scraping from indexmundi.com
 commodities <- 
   read_csv("commodities.csv") %>% 
   mutate(date = my(Month) %>% ceiling_date("months") %>% rollback()) %>% 
@@ -1591,45 +445,13 @@ inflation <-
   filter(!(str_detect(series_name,"(?i)mom|12mma|pa|trimmed"))) %>% 
   select(series_name,area,type,type_of_index,date,value)
 
+# data on gdp growth rates collected from pbs website
 gdp_growth <- 
   readxl::read_excel("gdp_pbs.xlsx") %>% 
   mutate(date = dmy(paste0("01","06",year,sep = "-")) %>% ceiling_date("months") %>% rollback(),
          across(Overall:Services,as.numeric)) %>% 
   pivot_longer(cols = c(-date,-year),names_to = "series_name",values_to = "value") %>% 
   select(series_name,date,value)
-  # read_csv("gdp.csv") %>% 
-  # janitor::clean_names() %>% 
-  # mutate(date = dmy(observation_date),value = observation_value) %>% 
-  # select(-dataset_name,-observation_date,-observation_value,-observation_status,-observation_status_comment,-sequence_no,-unit) %>% 
-  # filter(series_key %in% c(
-  #   "TS_GP_RLS_PAKGDP15_Y.GDP00150000",
-  #   "TS_GP_RLS_PAKGDP15_Y.GDP00120000",
-  #   "TS_GP_RLS_PAKGDP15_Y.GDP00130000",
-  #   "TS_GP_RLS_PAKGDP15_Y.GDP00140000"
-  # )) %>% 
-  # arrange(date,series_name) %>% 
-  # group_by(series_name) %>% 
-  # mutate(value_g = ((value/dplyr::lag(value,1))-1)*100,
-  #        series_name = if_else(series_name=="Gross Domestic Product (Total of Gross Value Addition at Constant Basic Prices(2015-16))",
-  #                              "Total GDP",
-  #                              series_name)) %>%
-  # select(series_name,date,value = value_g) %>% 
-  # filter(!is.na(value))
-
-nightlights <- 
-  read_csv("final_nightlights.csv") %>% 
-  mutate(date = ymd(paste0(year,"-",month,"-","01")) %>% ceiling_date("months") %>% rollback()) %>% 
-  select(province:tehsil,date,nightlights_sum,nightlights_mean) %>% 
-  group_by(province,district,date) %>% 
-  summarize(value = nightlights_sum %>% sum(),.groups = "drop") %>% 
-  filter(date>=as.Date("2021-09-30")) %>% 
-  filter(date==max(date)|date==min(date)) %>% 
-  group_by(province,district) %>% 
-  mutate(g = (value/dplyr::lag(value,1))*100-100) %>% 
-  filter(!is.na(g)) %>% 
-  ungroup() %>% 
-  select(-date,-value,value = g,province,district) %>% 
-  filter(!(value<-20 & value > 20))
 
 ### Write to csv
 
@@ -1653,394 +475,325 @@ remittances %>% write_csv("remittances.csv")
 commodities %>% write_csv("commodities_cleaned.csv")
 inflation %>% write_csv("inflation.csv")
 gdp_growth %>% write_csv("gdp_growth.csv")
-nightlights %>% write_csv("nightlights.csv")
 
+```
 
+```{r cps chart}
 
+library(patchwork)
 
-# trade %>% 
-#   write_csv("trade2.csv")
-# 
-# trade %>%
-#   write_csv("trade.csv")
-# top_districts <- 
-#   nightlights %>% 
-#   filter(date==as.Date("2022-12-31")) %>% 
+cps_data <- 
+  read_csv("cps.csv") %>%
+  group_by(date) %>%
+  summarize(value = sum(value, na.rm = T), .groups = "drop") %>%
+  mutate(value = zoo::rollmean(value, 12, align = "right", fill = NA)) %>%
+  drop_na() %>%
+  arrange(date)
+
+plotter <- 
+  function(l){
+     cps_data%>%
+      mutate(gr = (value - lag(value, l)) * 100 / lag(value, l)) %>%
+      ggplot() +
+      geom_col(aes(x = date, y = gr),
+               linewidth = 1.2,
+               fill = "deepskyblue4") +
+      theme_minimal() +
+      scale_x_date(name = NULL) +
+      scale_y_continuous(name = NULL,
+                         label = scales::label_percent(scale = 1)) +
+      theme(
+        plot.title = element_text(hjust = 0.5,size = 15,
+                                  margin = margin(t = 10, b = 10)),
+        axis.text = element_text(size = 12)
+        )
+  }
+
+wrap_plots(
+  plotter(12)+
+    ggtitle("Year on Year Change in CPS (12 MMA)"),
+  plotter(1)+
+    ggtitle("Month on Month Change in CPS (12 MMA)"),
+  ncol = 1
+)+
+  plot_annotation(
+    title = "Trends in Credit to Private Sector (CPS)",
+    theme = theme(
+      plot.title = element_text(hjust = 0.52,
+                                margin = margin(t = 10, b = 10),
+                                face = "bold",
+                                size = 18)
+      # axis.text = element_text(size = 1)
+    )
+  )+
+  ggsave(filename = "cps_trends.png",height = 11,width = 13,dpi = 600)
 
 
 ```
 
-```{r xgboost inflation and other work}
-
-library(tidyverse)
-
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-
-nightlights <- 
-  read_csv(
-  "final_nightlights.csv"
-) %>% 
-  janitor::clean_names()
-
-# nightlights %>% mutate(date = ymd(paste0(year,"-",month,"-","15"))) %>% 
-#   write_csv("nightlights2.csv")
-
-
-combined_data <- 
-  list.files("./easydata files",pattern = "csv",full.names = T) %>% 
-  map(~read_csv(.,show_col_types = F)) %>% 
-  bind_rows() %>% 
-  janitor::clean_names() %>% 
-  mutate(date = dmy(observation_date),value = observation_value) %>% 
-  select(-observation_date,-series_display_name,-observation_value,-observation_status,-observation_status_comment,-sequence_no,-unit)
-  
-combined_data %>% distinct(dataset_name)
-
-# combined_data %>% 
-#   filter(str_detect(dataset_name,"(?i)quantum index")) %>% 
-#   distinct(series_display_name,series_key) %>% View()
-
-combined_data %>% 
-  filter(str_detect(dataset_name,"(?i)inflation snapshot")) %>% 
-  distinct(dataset_name,series_name) %>% print(n = 100)
-
-# combined_data %>% distinct(dataset_name) %>% pull() %>% 
-#   paste0('"',.,'"') %>% 
-#   glue::glue_collapse(sep = ",")
-# 
-# combined_data %>%
-#   filter(str_detect(series_name,"(?i)wpi|cpi")) %>% 
-#   distinct(dataset_name,series_display_name,series_key) %>% View()
-
-des_series <- 
-  c("TS_GP_BOP_BPM6SUM_M.P00010",
-"TS_GP_BOP_BPM6SUM_M.P00090",
-"TS_GP_BOP_BPM6SUM_M.P00190",
-"TS_GP_BOP_BPM6SUM_M.P00730",
-"TS_GP_BAM_CRLONBOR_M.CLB00023000",
-"TS_GP_ER_FAERPKR_M.E00220",
-"TS_GP_BOP_MRECCOM_M.IMPA00980",
-"TS_GP_BOP_MRECCOM_M.IMPA00290",
-"TS_GP_PT_CPI_M.P00011516",
-"TS_GP_BAM_M2_W.M000500",
-# "TS_GP_BOP_WR_M.WR0340",
-"TS_GP_IR_REPOMR_D.ORR",
-"TS_GP_RLS_PSAUTO_M.TAS_001000",
-"TS_GP_RLS_CEMSEC_M.C_002000",
-"TS_GP_MFS_EPUI_M.EPUI4",
-"TS_GP_BOP_XRECCOM_M.EXPA00600",
-"TS_GP_RLS_SALEFERT_M.F_001000",
-"TS_GP_RL_LSM1516_M.LSM000160000",
-"TS_GP_BAM_M2_W.M000070",
-"TS_GP_RLS_POLSALE_M.P_001000",
-"TS_GP_RLS_ELECGEN_M.E_001000",
-"TS_GP_PT_CPI_M.P00081516",
-"TS_GP_RLS_CPI0708_M.P00010708",
-"TS_GP_RLS_CPI0708_M.P00020708",
-"TS_GP_RL_LSM_M.LSM000160000"
-)
-
-combined_data %>% 
-  filter(series_key %in% des_series) %>% 
-  arrange(factor(series_key,levels = des_series)) %>% 
-  distinct(series_name,series_key) %>% 
-  print(n = 100)
-
-series_names_r = c(
-      "CAB",
-      "Balance on Trade",
-      "Remittances",
-      "SBP Reserves",
-      "Credit to Private Sector",
-      "USD/PKR",
-      "Machinery Imports",
-      "Oil Imports",
-      "CPI",
-      "M2 Growth",
-      "Overnight Repo Rate",
-      "Auto sales",
-      "Domestic Cement Sales",
-      "EPU Index",
-      "Textile Exports",
-      "Fertilizers sales",
-      "LSM",
-      "M2",
-      "POL sales",
-      "Electricity Generation",
-      "WPI",
-      "CPI (old)",
-      "WPI (old)",
-      "LSM (old)"
-)
-
-mapping <- tibble(series_key = des_series,series_names_r = series_names_r)
-
-combined_data %>% names()
-
-m2_2 <- 
-  readxl::read_excel("m2_2.xlsx") %>% mutate(date = as.Date(date)) %>% 
-  distinct() %>% 
-  group_by(year(date),month(date)) %>% 
-  filter(date == max(date)) %>%
-  ungroup() %>% 
-  mutate(date = ceiling_date(date,"months")-1) %>% 
-  mutate(series_names_r = "M2") %>% 
-  select(date,observation_value = m2,series_names_r)
-
-lsm <- 
-  combined_data %>% 
-  left_join(mapping,by = c("series_key")) %>% 
-  filter(str_detect(series_names_r,"(?i)lsm")) %>% 
-  select(-series_key,-series_name,-dataset_name) %>% 
-  pivot_wider(names_from = series_names_r,values_from = value) %>% 
-  arrange(date) 
-lsm_factor <- 
-  lsm%>% 
-  filter(!is.na(LSM) & !is.na(`LSM (old)`)) %>% 
-  mutate(lsm2 = LSM/`LSM (old)`) %>% 
-  summarize(exp(mean(log(lsm2)))) %>% pull()
-lsm <- lsm %>% mutate(lsm = if_else(is.na(LSM),`LSM (old)`*lsm_factor,LSM)) %>% select(date,lsm)
-
-inflation <- 
-  combined_data %>% 
-  left_join(mapping,by = c("series_key")) %>% 
-  filter(str_detect(series_names_r,"(?i)cpi|wpi")) %>% 
-  select(-series_key,-series_name,-dataset_name) %>% 
-  pivot_wider(names_from = series_names_r,values_from = value) %>% 
-  janitor::clean_names() %>% 
-  arrange(date) %>% 
-  filter_at(vars(cpi:wpi_old),any_vars(!is.na(.))) %>% 
-  mutate(cpi = if_else(is.na(cpi),cpi_old,cpi),
-         wpi = if_else(is.na(wpi),wpi_old,wpi)) %>% 
-  select(-wpi_old,-cpi_old)
-
-
-combined_data %>% 
-  left_join(mapping,by = c("series_key")) %>% 
-  filter(!is.na(series_names_r)) %>%
-  filter(!(str_detect(series_names_r,"(?i)cpi|wpi"))) %>% 
-  filter(!(str_detect(series_names_r,"(?i)lsm"))) %>% 
-  filter(series_names_r!="M2", series_names_r!="M2 Growth") %>% 
-  filter(date==(ceiling_date(date,"months")-1)) %>% 
-  select(dataset_name,series_key,series_names_r,value,date) %>% 
-  select(-series_key,-dataset_name) %>% 
-  bind_rows(m2_2 %>% rename(value = observation_value)) %>% 
-  pivot_wider(names_from = series_names_r,values_from = value) %>% 
-  full_join(inflation) %>% 
-  full_join(lsm) %>% 
-  select(-`EPU Index`,-`Credit to Private Sector`,-`Overnight Repo Rate`) %>%
-  arrange(date) %>%
-  filter(date >= as.Date("2012-03-31")) %>% 
-           # date <= as.Date("2022-10-31")) %>% 
-  mutate(lsm = if_else(date==as.Date("2016-02-29"),dplyr::lag(lsm,1),lsm)) %>%
-  filter(date!=as.Date("2016-02-28")) %>% 
-  janitor::clean_names() %>% 
-  write_csv("final_data.csv")
-
-  
-  
-  group_by(series_names_r) %>% 
-  summarize(
-    min_date = min(date[!is.na(value)]),
-    max_date = max(date[!is.na(value)]),
-    no_of_obs = sum(!is.na(value))
-  ) %>% View("2")
-
-
-combined_data2 <- 
-  combined_data %>% 
-  left_join(mapping,by = c("series_key")) %>% 
-  filter(!is.na(series_names_r)) %>%
-  select(dataset_name,observation_date,series_key,series_names_r,observation_value) %>% 
-  select(-series_key,-dataset_name) %>% 
-  mutate(
-    date = dmy(observation_date)
-    # date2 = if_else(ceiling_date(date,"months")-1==date,"eom","non-eom")
-  ) %>% 
-  filter(series_names_r!="M2", series_names_r!="M2 Growth") %>% 
-  bind_rows(m2_2) %>% 
-  pivot_wider(names_from = series_names_r,values_from = observation_value) %>% 
-  arrange(date) %>% 
-  janitor::clean_names()
-
-combined_data2 %>% 
-  select(-observation_date) %>% 
-  filter(date==(ceiling_date(date,"months")-1)) %>% 
-  rowwise() %>% 
-  mutate(na_count = sum(is.na(c_across(-date)))) %>% 
-  arrange(na_count) %>% View()
-
-combined_data3 <- 
-  combined_data2%>% 
-  select(-1:-2) %>% 
-  rowwise() %>% 
-  mutate(na_count = sum(is.na(c_across(everything())))) %>% 
-  bind_cols(combined_data2 %>% select(1:2),.) %>% 
-  ungroup()
-
-combined_data3 %>% arrange(na_count) %>% View()
-  
-  
-  filter(!(is.na(oil_imports) & !is.na(m2)))
-  
-
-library(tidyverse)
-
-# create a sample data frame
-df <- data.frame(matrix(rnorm(150000), nrow = 3000))
-
-# replace some values with NAs
-df[sample(1:150000, 50000)] <- NA
-
-# add timestamps as row names
-df <- df %>% rownames_to_column(var = "timestamp")
-
-# sort the rows by timestamp
-df_sorted <- df %>% arrange(timestamp)
-
-# count the number of NAs in each row
-na_count <- df_sorted %>% rowwise() %>% mutate(na_count = sum(is.na(c_across(everything()))))
-
-# sort the rows by the number of NAs
-df_sorted2 <- na_count %>% arrange(na_count)
-
-# extract rows with minimum NAs while preserving order of timestamps
-df_min_na <- df_sorted2[1, ]
-
-
-# 
-# mapping <-
-#   tibble(
-#     series_name = c(
-#       ". Current account balance",
-#       "....... Balance on trade in goods and services",
-#       "......................... Workers' remittances",
-#       ". SBP Gross Reserves",
-#       "......III. Credit to Private sector (A+B)",
-#       "22 Average Exchange rate of Pak Rupees per U.S. Dollar",
-#       "05- Import Payments of Mineral Products",
-#       "16- Import Payments of Machinery and Mechanical Appliances",
-#       ". National CPI (YoY)",
-#       ". Urban CPI (YoY)",
-#       ". Rural CPI (YoY)",
-#       ". Urban Food CPI (YoY)",
-#       ". Rural Food CPI (YoY)",
-#       ". Broad Money (M2) - YoY Growth",
-#       ". Weighted-average Overnight Repo Rate"
-#     ),
-#     series_name2 =
-#       c(
-#         "CAB",
-#         "Balance on Trade",
-#         "Remittances",
-#         "SBP Reserves",
-#         "Credit to Private Sector",
-#         "USD/PKR",
-#         "Oil Imports",
-#         "Machinery Imports",
-#         "Inflation",
-#         "Urban Inflation",
-#         "Rural Inflation",
-#         "Urban Food Inflation",
-#         "Rural Food Inflation",
-#         "M2 Growth",
-#         "Overnight Repo Rate"
-#       )
-#   )
-
-combined_data %>% 
-  mutate(date = dmy(observation_date)) %>% 
-  filter(series_key %in% des_series,
-         date >= as.Date("2021-12-31")) %>% 
-  group_by(series_display_name) %>% 
-  filter(date==min(date) | date==max(date)) %>%
-  mutate(date2 = 
-           if_else(date==min(date),"B","A")
-  ) %>% 
-  ungroup() %>% 
-  select(series_display_name,series_key,date2,value = observation_value) %>% 
-  pivot_wider(names_from = date2,values_from = value) %>% 
-  left_join(mapping,by = c("series_key")) %>% View()
-  select(series_name = series_name2, B, A) %>% 
-  mutate(A = (B-A)*100/B,B = 100)
-  write_csv("econ_indicators_B_A.csv")
-  # distinct(series_display_name) %>% pull() %>% 
-  # paste0('"',.,'"') %>% 
-  # glue::glue_collapse(sep = ",")
-  
-combined_data %>% 
-  filter(series_display_name %>% str_detect("(?i)broad money")) %>%
-  mutate(date = dmy(observation_date)) %>% 
-  select(series_name,date,observation_value) %>% 
-  pivot_wider(names_from = series_name,values_from = observation_value) %>% 
-
-
-
-datasets_names <- 
-  c("Production and Sales of Auto Vehicles","Monthly Summary of Balance of Payments as per BPM6","Domestic Sale and Export of Cement","Credit / Loans Classified by Borrowers","Economic Policy Uncertainty (EPU) Index","Bank Floating Average Exchange Rates  (PKR per National Currency)","Export Receipts by all Commodities-HS2 level","Sales/offtake of Fertilizers","Import Payments by all Commodities-HS2 level","Inflation Snapshot (New Base: 2015-16)","Quantum Index Series of Selected Large-scale Manufacturing Items (base 2015-16)","Weekly Broad Money M2","POL Sales by Sector","Generation of Electricity by Sector","Country-wise Workers' Remittances","Structure of Interest Rate: Repo Market Rates")
-
-# lets make a 
+```{r reserves adequacy}
 
 imports <- 
-  read_csv("./easydata files/imports.csv") %>% 
-  janitor::clean_names()
-
-imports %>% 
-  rename(value = observation_value,series = series_display_name) %>% 
-  filter(str_detect(series,"^[0-9]{2}.*")) %>% 
-  mutate(date = lubridate::dmy(observation_date)) %>% 
-  filter(date >= as.Date("2021-12-31")) %>% 
-  # filter(date >= as.Date("2021-06-30")) %>% 
-  # group_by(date) %>% 
-  # summarize(v = sum(observation_value,na.rm = T)) %>% 
-  # ggplot()+
-  # geom_line(aes(date,v))
-  group_by(series) %>%
-  arrange(date) %>% 
-  mutate(
-    # value2 = value*100/max(value[date<=as.Date("2021-12-31")]),
-    value2 = value*100/value[date==as.Date("2021-12-31")],
-    month = seq_along(observation_date)-1
-  ) %>% 
-  # count(series) %>% distinct(n) %>% nrow
-  filter(max(value2)<=200) %>%
-  ungroup() %>% 
-  write_csv("imports2.csv")
-  ggplot()+
-  geom_line(aes(x = month,y = value2,color = series))+
-  theme_bw()+
-  theme(legend.position = "none")
-  View()
-
-  # .[! . %in% c("final_nightlights.csv","imports2.csv","nightlights2.csv")]
-  
-  filter(observation_value == max(observation_value)) %>% 
-  
-
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
-read_csv("imports.csv") %>% 
-  janitor::clean_names() %>% 
-  filter(str_detect(series_display_name,"^[0-9]{2}.*")) %>% 
-  mutate(date = lubridate::dmy(observation_date)) %>% 
-  filter(date >= as.Date("2021-06-30")) %>% 
+  read_csv("./easydata files/monthly_bop.csv") %>%
+  janitor::clean_names() %>%
+  mutate(date = dmy(observation_date)) %>% 
+  select(series_code = series_key,date,value = observation_value) %>% 
+  filter(
+    series_code %in% c(
+    "TS_GP_BOP_BPM6SUM_M.P00070",
+    "TS_GP_BOP_BPM6SUM_M.P00040"
+  )) %>% 
   group_by(date) %>% 
-  summarize(v = sum(observation_value,na.rm = T)) %>% 
+  summarize(imports = sum(value,na.rm =T),.groups = "drop") %>% 
+  select(date,imports)
+
+reserves <- 
+  read_csv("./reserves.csv") %>% 
+  select(1, sbp_reserves = 2)
+
+data <- 
+  imports %>% 
+  full_join(reserves) %>% 
+  drop_na() %>% 
+  mutate(ratio = sbp_reserves/imports) 
+
+data%>% 
   ggplot()+
-  geom_line(aes(date,v))
+  geom_line(
+    aes(x = date,y = ratio),
+    color = "brown4",
+    linewidth = 1.2
+  )+
+  theme_minimal()+
+  labs(x = NULL,y = "Number of months")+
+  ggtitle("SBP Reserves as number of months of imports")+
+  theme(
+    axis.title.y = element_text(margin = margin(r = 10),
+                                face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.text = element_text(face = "bold",size = 10),
+    plot.title = element_text(hjust = 0.5,face = "bold")
+  ) +
+  ggsave(
+     filename = "reserves_adequacy.png",
+     width = 9, 
+     height = 6
+     )
   
-  group_by(series_display_name) %>% 
-  filter(observation_value == max(observation_value)) %>% View()
-  summarize(
-    max_value = max(observation_value,na.rm= T)
+```
+
+```{r exchange rates}
+
+# data collected manually from https://www.khistocks.com/currency/kerb-rates.html and saved in the file interbank_openmarket.xlsx
+
+open <- 
+  read_excel("interbank_openmarket.xlsx") %>% 
+  select(1:4) %>% 
+  janitor::clean_names() %>% 
+  drop_na() %>% 
+  mutate(date = mdy(date_2),
+         open = (buy + sell)/2) %>% 
+  select(date,open)
+
+interbank <- 
+  read_excel("interbank_openmarket.xlsx") %>% 
+  select(-1:-8) %>% 
+  mutate(date = as.Date(`date...9`),
+         interbank = (bid+offer)/2) %>% 
+  select(date,interbank) %>% 
+  drop_na()
+
+interbank %>% 
+  left_join(open, by = c("date")) %>% 
+  pivot_longer(cols = -1,names_to = "type") %>% 
+  mutate(type = factor(type,levels = c("open","interbank"))) %>% 
+  ggplot()+
+  geom_line(aes(x = date, y = value,color = type),linewidth = 1.2)+
+  scale_color_manual(
+    labels = c("Open Market", "Interbank"),
+    values = c("gold","azure4"),name = NULL)+
+  labs(y = "USD/PKR",
+       title = "Divergence in the Interbank and Open Market Rates of USD/PKR")+
+  theme_minimal()+
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold",margin = margin(r = 10)),
+    legend.position = c(0.8,0.2),
+    legend.text = element_text(face = "bold",size = 10),
+    plot.title = element_text(hjust = 0.5,face = "bold",margin = margin(b = 12))
+  )+
+  ggsave(
+    filename = "interbank_open.png",
+    width = 10,
+    height = 7,
+    dpi = 600
+  )
+
+```
+
+```{r global commodity prices}
+
+
+
+library(tidyverse)
+library(showtext)
+library(ggtext)
+library(patchwork)
+library(gghighlight)
+
+df2 <- 
+  read_csv("commodities_cleaned.csv") %>% 
+  filter(date>=ymd("2021-7-1"),
+         series_name != "Food Price Index")
+
+font <- "Gudea"
+# font_add_google(family=font, font, db_cache = TRUE)
+# fa_path <- systemfonts::font_info(family = "Font Awesome 6 Brands")[["path"]]
+# font_add(family = "fa-brands", regular = fa_path)
+theme_set(theme_minimal(base_family = font,
+                        base_size = 10)
+          )
+
+bg = "white"
+txt_col <- "black"
+# showtext_auto(enable = TRUE)
+
+p1 <- df2 %>% 
+  ggplot() +
+  geom_hline(yintercept = 100,linetype="solid", size=.25) +
+  geom_point(data=df2 %>% 
+               group_by(series_name) %>% 
+               slice_max(date),
+             aes(x=date, y=value, color=series_name),shape=16) +
+  geom_line(aes(x=date, y=value, color=series_name)) +
+  gghighlight(use_direct_label = F,
+              unhighlighted_params = list(colour = alpha("grey85", 1))) +
+  geom_text(data=df2 %>% 
+              group_by(series_name) %>% 
+              slice_max(date),
+            aes(x=date, y=value, color=series_name, label = round(value)),
+            hjust = -.5, vjust = .5, size=2.5, family=font, fontface="bold") +
+  facet_wrap(~factor(series_name, 
+                       levels=
+                         df2 %>% 
+                         group_by(series_name) %>% 
+                         filter(date==max(date)) %>% 
+                         arrange(desc(value)) %>% 
+                         pull(series_name)
+  ))+
+  coord_cartesian(clip = "off") +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_text(color=txt_col,
+                             size=7),
+    strip.text.x = element_text(face="bold"),
+    plot.background = element_rect(color=bg, fill=bg),
+    plot.margin = margin(10,10,10,10),
+    legend.position = "none",
+    legend.title = element_text(face="bold")
+  )
+p1
+ggsave("Commodity Prices.png",plot = p1,width = 14,height = 7,dpi = 600)
+
+
+```
+
+```{r m2 plot}
+
+m2 <- 
+  read_csv("m2_2.csv") %>%
+  mutate(
+    s4_2 = s4,
+    s4 = if_else(str_detect(s4,"PSEs Special Account-Debt Repayment")|str_detect(s4,"Zakat"),
+                 "Other Items (Net)",
+                 s4
+    ),
+    s3 = if_else(str_detect(s4_2,"PSEs Special Account-Debt Repayment")|str_detect(s4_2,"Zakat"),
+                 "Other Items (Net)",
+                 s3
+    )
   ) %>% 
-  # glimpse()
-  
-         
-  distinct(series_display_name) %>% 
-  print(n = 1000)
-  names()
+  select(-s4_2) %>% 
+  group_by(s1,s2,s3,s4,date) %>% 
+  summarize(value = sum(value,na.rm = T),.groups = "drop")
 
+m2_labels_changed <- 
+  m2 %>% 
+  mutate(s4 = case_when(
+    s4=="Borrowings for Budgetary Support"~"Govt. Borrowings for Budgetary Support",
+    s4=="Scheduled Banks"~"NFA-Scheduled Banks",
+    s4=="State Bank of Pakistan"~"NFA-State Bank of Pakistan",
+    TRUE~s4
+  )) %>% 
+  mutate(s4 = factor(s4,
+                     levels = c(
+                       "Govt. Borrowings for Budgetary Support",
+                       "Commodity Operations",
+                       "Credit to Public Sectors Enterprises (PSEs)",
+                       "Credit to Private Sector",
+                       "Credit to NBFIs",
+                       "NFA-Scheduled Banks",
+                       "NFA-State Bank of Pakistan",
+                       "Other Items (Net)",
+                       m2 %>% filter(s1=="Liability Side") %>% distinct(s4) %>% pull()
+                     )))
 
+facetted_plotter <- function(data){
+  data %>%
+    ggplot() +
+    geom_line(aes(x = date, y = value,color = s4),linewidth = 1)+
+    facet_wrap( ~ s4,scales = "free_y") +
+    guides(
+      fill = "none",
+      color = "none") +
+    labs(x = NULL, y = NULL) +
+    scale_y_continuous(
+      label = scales::label_comma()
+    )+
+    theme_minimal()+
+    theme(
+      plot.title = element_text(hjust = 0.5,size = 16,face = "bold"),
+      plot.margin = margin(rep(15,4),unit = "pt")
+      )
+}
+
+facetted_asset <- 
+  m2_labels_changed %>% 
+  filter(s1=="Asset Side",
+         date >= ymd("2022-1-1")) %>% 
+  facetted_plotter()+
+  ggtitle("Asset Side")+
+  scale_color_manual(values = rep("brown",10))
+
+facetted_liab <- 
+  m2_labels_changed %>% 
+  filter(s1=="Liability Side",
+         date >= ymd("2022-1-1")) %>% 
+  facetted_plotter()+
+  ggtitle("Liability Side")+
+  scale_color_manual(values = rep("turquoise",10))
+
+ggsave(
+  plot = 
+    wrap_plots(
+      facetted_asset,facetted_liab,
+      ncol = 1,
+      heights = c(1.3,1)
+      )+
+    plot_annotation(
+      title = "Broad Money (M2) Components",
+      theme = theme(
+        plot.title = element_text(size = 18,hjust = 0.55, face = "bold",
+                                  margin = margin(t = 15))
+      )
+    ),
+  filename = "m2_plot.png",
+  width = 13,
+  height = 13,
+  dpi = 600
+)
 
 
 ```
