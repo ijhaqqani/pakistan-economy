@@ -1,5 +1,5 @@
 ---
-title: "debt_viz"
+title: "pakistan-economy"
 output: html_document
 date: "2023-05-08"
 editor_options: 
@@ -10,15 +10,12 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r area chart with subcategories}
+```{r m2 plot}
 
 library(tidyverse)
 library(readxl)
 library(ggtext)
 library(patchwork)
-library(ggstream)
-rm(list = ls())
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
 
 m2 <- 
   read_csv("m2_2.csv") %>%
@@ -36,202 +33,6 @@ m2 <-
   select(-s4_2) %>% 
   group_by(s1,s2,s3,s4,date) %>% 
   summarize(value = sum(value,na.rm = T),.groups = "drop")
-
-m2_perc <- 
-  m2 %>% 
-  group_by(s1,date) %>% 
-  mutate(value = value/sum(value)) %>% 
-  ungroup()
-
-# m2_perc %>% filter(date==ymd("2014-7-4")) %>% clipr::write_clip()
-
-# m2 %>% 
-#   filter(s1=="Asset Side") %>%
-#   filter(s4 %in% c("Borrowings for Budgetary Support","Credit to Private Sector")) %>% 
-#   select(s4,date,value) %>% 
-#   arrange(s4) %>% 
-#   group_by(s4) %>% 
-#   mutate(value = (value-mean(value))/sd(value)) %>% 
-#   ggplot(aes(x = date,y = value,fill = s4))+
-#   geom_stream()
-
-# tibble(
-#   x = seq.Date(ymd("2014-7-1"),ymd("2023-6-2"),by = "week") %>% .[1:30],
-#   y = rnorm(30,30,30),
-#   group = rep(c(1,2,3,4,5,6),5) %>% as.factor()
-# ) %>% 
-#   ggplot()+
-#   geom_stream(aes(x = x,y = y,fill = group))
-
-m2_perc %>% 
-  filter(s1=="Asset Side") %>% 
-  ggplot()+
-  geom_area(aes(x = date, y = value, fill = s4))
-
-# m2 %>% 
-#   filter(year(date)==2016 &
-#            month(date) %in% c(1:8)) %>%
-#   ggplot()+
-#   geom_line(aes(x = date,y = value))+
-#   # xlim(c(ymd("2016-1-1","2016-6-30")))+
-#   # scale_x_date(limits = c(ymd("2016-1-1","2016-6-30")))+
-#   facet_wrap(~s4,scales = "free")
-
-s3_data <- 
-  m2 %>%
-  filter(s1 == "Asset Side") %>%
-  group_by(s3, date) %>%
-  summarize(value = sum(value, na.rm = T), .groups = "drop") %>% 
-  mutate(s3 = factor(s3,levels = c(
-    "Net Government Sector Borrowings",
-    "Credit to Non-Government Sector",
-    "Other Items (Net)",
-    "Scheduled Banks",
-    "State Bank of Pakistan"
-  )))
-
-colors = c("magenta4","magenta2","palegreen4","palegreen2","beige",
-           "sienna2","violet","yellow")
-
-min_date <- s3_data %>% pull(date) %>% min()
-max_date <- s3_data %>% pull(date) %>% max()
-
-main_m2 <- 
-  ggplot()+
-  # ?geom_hline(color = "black",aes(x = date,y = 0))+
-  geom_area(
-    data =
-      s3_data %>%
-      arrange(s3) %>% 
-      filter(!(s3 %in% c("Scheduled Banks","State Bank of Pakistan"))),
-      # filter(!str_detect(s3,"(?i)borrowing|commodity|credit")),
-    aes(x = date,y = value,group = s3),
-    # aes(x = date,y = value,fill = s3),
-    fill = "transparent",
-    color = "black"
-  )+
-  geom_segment(
-    aes(
-      x = min_date,
-      y = 0,
-      xend = max_date,
-      yend = 0
-      )
-    )+
-  geom_area(
-    data = 
-      m2 %>% 
-      filter(s1=="Asset Side") %>% 
-      group_by(s3,s4,date) %>% 
-      summarize(value = sum(value,na.rm = T),.groups = "drop") %>% 
-      arrange(s3) %>% 
-      filter(!(s3 %in% c("Scheduled Banks","State Bank of Pakistan"))), 
-      # filter(!str_detect(s3,"(?i)borrowing|commodity|credit")),
-    aes(x = date,y = value,fill = s4),
-    alpha = 0.5
-    # color = "black"
-  )+
-  # geom_text(
-  #   data = 
-  #     s3_data %>% 
-  #     arrange(s3) %>% 
-  #     filter(date==max(date)),
-  #   aes(x = date, y = value,label = s3,color = s3),
-  #   show.legend = F
-  # )+
-  # scale_fill_manual(values = colors)+
-  # scale_x_date(expand = expansion(mult = c(0,0.2)))+
-  # theme(
-  #   legend.position = "none",
-  #   plot.margin = margin(10,10,10,10)
-  # )
-  scale_fill_manual(values = c(colors),name = NULL)+
-  scale_y_continuous(
-    # expand = expansion(mult = c(0.4,0.1)),
-    labels = scales::label_comma())+
-  # guides(fill = "none")+
-  theme(
-    panel.background = element_rect(fill = NA),
-    panel.grid.major = element_line(color = "gainsboro",linewidth = 0.1),
-    axis.text.y = element_text(),
-    axis.title = element_blank(),
-    panel.grid.minor.y = element_blank(),
-    legend.position = c(0.3,0.8),
-    legend.background = element_blank(),
-    plot.title = element_text(margin = margin(b = 10,unit = "pt")),
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    legend.text = element_text(size = 8)
-  )
-main_m2
-  # xlim(c(ymd("2016-1-1","2016-6-30")))
-
-foreign_assets <- 
-  ggplot()+
-  geom_area(
-    data = 
-      m2 %>% 
-      filter(s1=="Asset Side",
-             s2 %>% str_detect("(?i)nfa")) %>% 
-      group_by(s4,date) %>% 
-      summarize(value = sum(value,na.rm = T),.groups = "drop") %>% 
-      mutate(s4 = paste0("NFA of ",s4)),
-    aes(x = date,y = value,fill = s4)
-  )+
-  # theme_void()+
-  scale_y_continuous(
-    breaks = c(-3000000,-1000000,0,1000000),
-    labels = scales::label_comma()
-    )+
-  scale_x_date(
-    # expand = expansion(mult = c(0.1,0.1)),
-    # breaks = c(
-    #   min_date,
-    #   min_date + floor((max_date-min_date)/2),
-    #   max_date
-    #   ),
-    date_labels = "%Y-%m")+
-  scale_fill_discrete(name = NULL)+
-  # labs(
-  #   title = "Net Foreign Assets of the Banking System"
-  # )+
-  theme(
-    panel.background = element_rect(fill = NA),
-    panel.grid.major = element_line(color = "gainsboro",linewidth = 0.1),
-    axis.text.y = element_text(),
-    axis.title = element_blank(),
-    panel.grid.minor.y = element_blank(),
-    legend.position = c(0.27,0.3),
-    legend.background = element_blank(),
-    plot.title = element_text(margin = margin(b = 10,unit = "pt")),
-    legend.text = element_text(size = 8)
-  )
-foreign_assets
-
-facetted_plotter <- function(data){
-  data %>%
-    ggplot() +
-    # geom_area(aes(x = date, y = value, fill = s4)) +
-    # geom_line(aes(x = date, y = value, color = s4)) +
-    geom_line(aes(x = date, y = value,color = s4),linewidth = 1)+
-    # geom_col(aes(x = date, y = value, fill = s4)) +
-    facet_wrap( ~ s4,scales = "free_y") +
-    guides(
-      fill = "none",
-      color = "none") +
-    labs(x = NULL, y = NULL) +
-    scale_y_continuous(
-      label = scales::label_comma()
-    )+
-    # scale_fill_manual(values = colors)+
-    # scale_color_manual(values = colors)+
-    # scale_color_manual(color = )
-    theme_minimal()+
-    theme(
-      plot.title = element_text(hjust = 0.5,size = 16,face = "bold"),
-      plot.margin = margin(rep(15,4),unit = "pt")
-      )
-}
 
 m2_labels_changed <- 
   m2 %>% 
@@ -254,13 +55,32 @@ m2_labels_changed <-
                        m2 %>% filter(s1=="Liability Side") %>% distinct(s4) %>% pull()
                      )))
 
+facetted_plotter <- function(data){
+  data %>%
+    ggplot() +
+    geom_line(aes(x = date, y = value,color = s4),linewidth = 1)+
+    facet_wrap( ~ s4,scales = "free_y") +
+    guides(
+      fill = "none",
+      color = "none") +
+    labs(x = NULL, y = NULL) +
+    scale_y_continuous(
+      label = scales::label_comma()
+    )+
+    theme_minimal()+
+    theme(
+      plot.title = element_text(hjust = 0.5,size = 16,face = "bold"),
+      plot.margin = margin(rep(15,4),unit = "pt")
+      )
+}
+
 facetted_asset <- 
   m2_labels_changed %>% 
   filter(s1=="Asset Side",
          date >= ymd("2022-1-1")) %>% 
   facetted_plotter()+
   ggtitle("Asset Side")+
-  scale_color_manual(values = rep("brown",100))
+  scale_color_manual(values = rep("brown",10))
 
 facetted_liab <- 
   m2_labels_changed %>% 
@@ -268,18 +88,7 @@ facetted_liab <-
          date >= ymd("2022-1-1")) %>% 
   facetted_plotter()+
   ggtitle("Liability Side")+
-  scale_color_manual(values = rep("turquoise",5))
-
-
-
-# ggsave(plot = facetted_asset,
-#        filename = "test1.pdf",
-#        width = 10,
-#        height = 7,
-#        dpi = 600)
-
-facetted_asset
-facetted_liab
+  scale_color_manual(values = rep("turquoise",10))
 
 ggsave(
   plot = 
@@ -296,27 +105,16 @@ ggsave(
         # plot.margin = margin(t = 10,r = 15, l = 15)
       )
     ),
-  filename = "experimental_m2_plot.png",
+  filename = "m2_plot.png",
   width = 12,
   height = 14,
   dpi = 600
 )
 
-library(patchwork)
-p2 <- p1 / foreign_assets_inset
-p2 %>% ggsave(plot = ., filename = "experimental_plot2.pdf",width = 12,height = 10,dpi = 600)
-p1 %>% ggsave(plot = ., filename = "experimental_plot.pdf",width = 12,height = 8,dpi = 600)
-
-ggsave(plot = p1,"experimental_area_chart.pdf",width = 13,height = 8,dpi = 600)
 
 ```
 
 ```{r cps}
-
-library(tidyverse)
-library(readxl)
-
-setwd("C:/Users/ijlal/OneDrive/Documents/Personal/Portfolio")
 
 plotter <- 
   function(l){
